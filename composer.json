@@ -1,9 +1,0 @@
-{
-    "require": {
-        "google/apiclient": "^2.0",
-        "phpmailer/phpmailer": "^6.1",
-        "monolog/monolog": "^2.1",
-        "mpdf/mpdf": "^8.0",
-        "thiagoalessio/tesseract_ocr": "^2.9"
-    }
-}
