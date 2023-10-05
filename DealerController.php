@@ -9,10 +9,10 @@ require 'PHPMailer/src/SMTP.php';
 
 class DealerController{
     
-    private $dbUsername = "root";
+    private $dbUsername = "";
     private $dbPassword = "";
-    private $dbHost = "localhost";
-    private $dbSchema = "thumpstar_us";
+    private $dbHost = "";
+    private $dbSchema = "";
     private $dbConnect;
     private $email;
     private $password;
@@ -219,7 +219,7 @@ class DealerController{
        $email = $this->getEmail();
        $password = $this->getPassword();
      
-       $query = $this->dbConnect->prepare("call client_login(?)");
+       $query = $this->dbConnect->prepare("SELECT dealerID, password,isDefault FROM dealers WHERE email = ?");
        $query->bind_param("s",$email);
        $query->execute();
        $result = $query->get_result();
@@ -236,7 +236,11 @@ class DealerController{
 
     public function viewDealerDetail(){
         $dealerID = $this->getDealerID();
-        $query = $this->dbConnect->prepare("call get_dealer_info(?)");
+        $query = $this->dbConnect->prepare("SELECT firstname,lastname,address,contactNumber,region,town,zipCode,email,companyName
+        FROM dealers
+        JOIN locations 
+        ON dealers.dealerID = locations.dealerID 
+        WHERE dealers.dealerID = ?");
         $query->bind_param("s",$dealerID);
         $query->execute();
         $result = $query->get_result();
@@ -260,7 +264,7 @@ class DealerController{
 
     public function viewInventory(){
         $dealerID = $this->getDealerID();
-        $query = $this->dbConnect->prepare("call get_dealer_inventory(?)");
+        $query = $this->dbConnect->prepare("SELECT vinNumber,engineNumber,model,shipment,isSold FROM vins WHERE dealerID = ?");
         $query->bind_param("s",$dealerID);
         $query->execute();
         $result = $query->get_result();
@@ -294,7 +298,7 @@ class DealerController{
 
     public function getInvoice(){
         $dealerID = $this->getDealerID();
-        $query = $this->dbConnect->prepare("call get_invoices(?)");
+        $query = $this->dbConnect->prepare("SELECT date, amount, invoiceNumber FROM invoices WHERE dealerID = ?");
         $query->bind_param("s",$dealerID);
         $query->execute();
         $result = $query->get_result();
@@ -317,7 +321,7 @@ class DealerController{
 
     public function viewCreditEarned(){
         $dealerID = $this->getDealerID();
-        $query = $this->dbConnect->prepare("call get_credit_earned(?)");
+        $query = $this->dbConnect->prepare("SELECT count(vinNumber) as sold FROM vins WHERE dealerID = ? AND isSold = 'Y'");
         $query->bind_param("s",$dealerID);
         $query->execute();
         $result = $query->get_result();
@@ -337,7 +341,7 @@ class DealerController{
 
     public function getSumInvoice(){
         $dealerID = $this->getDealerID();
-        $query = $this->dbConnect->prepare("call get_sum_invoice(?)");
+        $query = $this->dbConnect->prepare("SELECT sum(amount) as amount FROM invoices WHERE dealerID = ?");
         $query->bind_param("s",$dealerID);
         $query->execute();
         $result = $query->get_result();
@@ -363,7 +367,19 @@ class DealerController{
         if(!$uploadPath) return false;
 
 
-        $query = $this->dbConnect->prepare('call save_vin_registration(?,?,?,?,?,?,?,?,?)');
+        $query = $this->dbConnect->prepare('INSERT INTO vin_registration(
+            `dealerID`,
+            `refNumber`,
+            `vinNumber`,
+            `orderNumber`,
+            `customerName`,
+            `model`,
+            `type`,
+            `dateOfSale`,
+            `attachment_path`
+            )VALUES(
+            ?,?,?,?,?,?,?,?,?
+            )');
         $query->bind_param("sssssssss",$dealerID,$refNumber,$vinNumber,$orderNumber,$customerName,$model,$type,$dateOfPurchase,$uploadPath);
         $query->execute();
 
@@ -389,8 +405,8 @@ class DealerController{
         $zipCode = $this->getZipCode();
         $dealerID = $this->getDealerID();
 
-        $query = $this->dbConnect->prepare("call update_dealer_info(?,?,?,?,?,?)");
-        $query->bind_param("ssssss",$dealerID,$contact,$address,$town,$region,$zipCode);
+        $query = $this->dbConnect->prepare("UPDATE locations SET contactNumber = ?, address = ?,region = ?, town = ?, zipCode = ? WHERE dealerID = ?");
+        $query->bind_param("ssssss",$contact,$address,$region,$town,$zipCode,$dealerID);
         $query->execute();
 
         if($query->affected_rows > 0) return true;
@@ -406,7 +422,7 @@ class DealerController{
     public function generateRefNumber(){
         $maxRegID = $this->getMaxRegID();
         $date = date("mdy");
-        $refNumber = "USAVIN-{$maxRegID}-{$date}";
+        $refNumber = "AUVIN-{$maxRegID}-{$date}";
 
         return $refNumber;
 
@@ -414,7 +430,7 @@ class DealerController{
 
 
     public function getMaxRegID(){
-        $query = $this->dbConnect->prepare("call getMaxRegID()");
+        $query = $this->dbConnect->prepare("SELECT MAX(requestID) AS v_id FROM vin_registration");
         $query->execute();
         $rs = $query->get_result();
         $result = $rs->fetch_assoc();
@@ -444,7 +460,7 @@ class DealerController{
 
     public function viewSoldUnit(){
         $dealerID = $this->getDealerID();
-        $query = $this->dbConnect->prepare("call get_sold_units(?)");
+        $query = $this->dbConnect->prepare("SELECT vinNumber,engineNumber,model,shipment FROM vins WHERE dealerID = ? AND isSold = 'Y'");
         $query->bind_param("i",$dealerID);
         $query->execute();
         $result = $query->get_result();
@@ -685,8 +701,8 @@ class DealerController{
         $hash = password_hash($confPassword,PASSWORD_DEFAULT);
        
         
-        $query = $this->dbConnect->prepare("call change_password(?,?)");
-        $query->bind_param("is",$dealerID,$hash);
+        $query = $this->dbConnect->prepare("UPDATE dealers SET password = ? WHERE dealerID = ?");
+        $query->bind_param("si",$hash,$dealerID);
         $query->execute();
 
         if($query->affected_rows > 0) return true;
@@ -697,7 +713,7 @@ class DealerController{
     public function updateToNonDefault(){
         $dealerID = $this->getDealerID();
 
-        $query = $this->dbConnect->prepare("call update_to_non_default(?)");
+        $query = $this->dbConnect->prepare("UPDATE dealers SET isDefault = 'N' WHERE dealerID = ?");
         $query->bind_param("i",$dealerID);
         $query->execute();
 
@@ -734,7 +750,7 @@ class DealerController{
      public function forgotPassword(){
         $email = $this->getEmail();
 
-        $query = $this->dbConnect->prepare("call client_login(?)");
+        $query = $this->dbConnect->prepare("SELECT dealerID, password,isDefault FROM dealers WHERE email = ?");
         $query->bind_param("s",$email);
         $query->execute();
         $result = $query->get_result();
